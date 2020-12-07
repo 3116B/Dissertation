@@ -118,20 +118,23 @@ class Parameters:
     
     def hire_continuous(self) -> float:
         p = self
-        e_b = self.e_b
-        e_b_h = self.e_b_h
+        e_b = p.e_b
+        e_b_h = p.e_b_h
+        e_b_l = 1 - e_b_h
+        e_g_h = p.e_g_h
+        e_g_l = 1 - e_g_h
         e_g = 1 - e_b
-        
         assert self.threshold > self.w_min, "Make sure to calculate threshold before hiring"
         assert e_b <= 1, "Something wrong with the logic"
         
         if self.ref_distribution == "Poisson":
-            b_h_lambda = 1/(p.b_v_freq * p.number_of_blue) * ( (e_b * p.h_b * ((p.b_v_freq * p.alpha_b) + (1-p.alpha_b)*(1-p.b_v_freq))) + (1-p.h_g)*e_g * ((p.g_v_freq* p.alpha_g) + (1-p.g_v_freq) * (1-p.alpha_g)))
-            b_l_lambda = 1/((1-p.b_v_freq) * p.number_of_blue) * ( (e_b * p.h_b * (((1-p.b_v_freq) * p.alpha_b) + (1-p.alpha_b)*(p.b_v_freq))) + (1-p.h_g)*e_g * (((1-p.g_v_freq)* p.alpha_g) + (p.g_v_freq * (1-p.alpha_g))))
+            b_h_lambda = 1/(p.b_v_freq * p.number_of_blue) * ( (e_b * p.h_b * ((e_b_h * p.alpha_b) + (1-p.alpha_b)*(e_b_l))) + (1-p.h_g)*e_g * ((e_g_h * p.alpha_g) + (e_g_l) * (1-p.alpha_g)))
+            b_l_lambda = 1/((1-p.b_v_freq) * p.number_of_blue) * ( (e_b * p.h_b * (((1-e_b_h) * p.alpha_b) + (1-p.alpha_b)*(e_b_h))) + (1-p.h_g)*e_g * (((1-e_g_h)* p.alpha_g) + (e_g_h * (1-p.alpha_g))))
             
             
-            g_h_lambda = 1/(p.g_v_freq * p.number_of_green) * ( (e_g * p.h_g * ((p.g_v_freq * p.alpha_g) + (1-p.alpha_g)*(1-p.g_v_freq))) + (1-p.h_b)*e_b * ((p.b_v_freq* p.alpha_b) + (1-p.b_v_freq) * (1-p.alpha_b)))
-            g_l_lambda = 1/((1-p.g_v_freq) * p.number_of_green) * ( (e_g * p.h_g * (((1-p.g_v_freq) * p.alpha_g) + (1-p.alpha_g)*(p.g_v_freq))) + (1-p.h_b)*e_b * (((1-p.b_v_freq)* p.alpha_b) + (p.b_v_freq * (1-p.alpha_b))))            
+            g_h_lambda = 1/(p.g_v_freq * p.number_of_green) * ( (e_g * p.h_g * ((e_g_h * p.alpha_g) + (1-p.alpha_g)*(1-e_g_h))) + (1-p.h_b)*e_b * ((e_b_h* p.alpha_b) + (1-e_b_h) * (1-p.alpha_b)))
+            g_l_lambda = 1/((1-p.g_v_freq) * p.number_of_green) * ( (e_g * p.h_g * (((1-e_g_h) * p.alpha_g) + (1-p.alpha_g)*(e_g_h))) + (1-p.h_b)*e_b * (((1-e_b_h)* p.alpha_b) + (e_b_h * (1-p.alpha_b))))
+            
             
             p_b_h_zero = poisson.pmf(0, b_h_lambda)
             p_b_l_zero = poisson.pmf(0, b_l_lambda)
@@ -381,7 +384,7 @@ def plot_iterations():
             axs[j].set_title(f'iteration_no as a function of {key_list[0]}')
     plt.show()
 
-print(find_steady_state(e_b_0 = 0.8, n=2.0, alpha_b = 1.0, alpha_g = 1.0, h_b = 1.0, h_g = 1.0))
+print(find_steady_state(e_b_0 = 0.8, n=2.0, alpha_b = 1.0, alpha_g = 0.5, h_b = 1.0, h_g = 1.0))
 
 
 # run_periods(periods=15, e_b = 0.8, n=2.0, alpha_b = 1.0, 
