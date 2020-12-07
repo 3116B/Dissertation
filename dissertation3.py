@@ -10,6 +10,8 @@ import matplotlib.pyplot as plt
 @dataclass
 class Parameters:
     e_b: float
+    e_b_h: float # defined as proportion of e_b that is h (prob h given e_b)
+    e_g_h: float = 0.5
     # tao: float
     number_of_blue: int = 1
     number_of_green: int = 1
@@ -22,11 +24,11 @@ class Parameters:
     value_distribution: str = "vh vl"
     vh : float = 2
     vl : float = 0
-    alpha: float = 0.5
-    alpha_b: float = 0.7
-    alpha_g: float = 0.5
+    alpha: float = 0.7
+    alpha_b: float = alpha
+    alpha_g: float = alpha
     
-    vh_freq: float = 0.5
+    vh_freq: float = 0.7
     b_v_freq: float = vh_freq
     g_v_freq: float = vh_freq
     
@@ -57,6 +59,10 @@ class Parameters:
     def calculate_threshold(self):
         p = self
         e_b = p.e_b
+        e_b_h = p.e_b_h
+        e_b_l = 1 - e_b_h
+        e_g_h = p.e_g_h
+        e_g_l = 1 - e_g_h
         e_g = 1 - e_b
         # figure somehting out here
         # self.alpha_b = self.alpha
@@ -65,12 +71,12 @@ class Parameters:
         # print(self.alpha_b)
         
         if self.ref_distribution == "Poisson":
-            b_h_lambda = 1/(p.b_v_freq * p.number_of_blue) * ( (e_b * p.h_b * ((p.b_v_freq * p.alpha_b) + (1-p.alpha_b)*(1-p.b_v_freq))) + (1-p.h_g)*e_g * ((p.g_v_freq* p.alpha_g) + (1-p.g_v_freq) * (1-p.alpha_g)))
-            b_l_lambda = 1/((1-p.b_v_freq) * p.number_of_blue) * ( (e_b * p.h_b * (((1-p.b_v_freq) * p.alpha_b) + (1-p.alpha_b)*(p.b_v_freq))) + (1-p.h_g)*e_g * (((1-p.g_v_freq)* p.alpha_g) + (p.g_v_freq * (1-p.alpha_g))))
+            b_h_lambda = 1/(p.b_v_freq * p.number_of_blue) * ( (e_b * p.h_b * ((e_b_h * p.alpha_b) + (1-p.alpha_b)*(e_b_l))) + (1-p.h_g)*e_g * ((e_g_h * p.alpha_g) + (e_g_l) * (1-p.alpha_g)))
+            b_l_lambda = 1/((1-p.b_v_freq) * p.number_of_blue) * ( (e_b * p.h_b * (((1-e_b_h) * p.alpha_b) + (1-p.alpha_b)*(e_b_h))) + (1-p.h_g)*e_g * (((1-e_g_h)* p.alpha_g) + (e_g_h * (1-p.alpha_g))))
             
             
-            g_h_lambda = 1/(p.g_v_freq * p.number_of_green) * ( (e_g * p.h_g * ((p.g_v_freq * p.alpha_g) + (1-p.alpha_g)*(1-p.g_v_freq))) + (1-p.h_b)*e_b * ((p.b_v_freq* p.alpha_b) + (1-p.b_v_freq) * (1-p.alpha_b)))
-            g_l_lambda = 1/((1-p.g_v_freq) * p.number_of_green) * ( (e_g * p.h_g * (((1-p.g_v_freq) * p.alpha_g) + (1-p.alpha_g)*(p.g_v_freq))) + (1-p.h_b)*e_b * (((1-p.b_v_freq)* p.alpha_b) + (p.b_v_freq * (1-p.alpha_b))))
+            g_h_lambda = 1/(p.g_v_freq * p.number_of_green) * ( (e_g * p.h_g * ((e_g_h * p.alpha_g) + (1-p.alpha_g)*(1-e_g_h))) + (1-p.h_b)*e_b * ((e_b_h* p.alpha_b) + (1-e_b_h) * (1-p.alpha_b)))
+            g_l_lambda = 1/((1-p.g_v_freq) * p.number_of_green) * ( (e_g * p.h_g * (((1-e_g_h) * p.alpha_g) + (1-p.alpha_g)*(e_g_h))) + (1-p.h_b)*e_b * (((1-e_b_h)* p.alpha_b) + (e_b_h * (1-p.alpha_b))))
             
             
             p_b_h_zero = poisson.pmf(0, b_h_lambda)
@@ -78,6 +84,7 @@ class Parameters:
             
             p_g_h_zero = poisson.pmf(0, g_h_lambda)
             p_g_l_zero = poisson.pmf(0, g_l_lambda)
+
         
         prob_b = p.number_of_blue / p.total_n
         prob_b_h = prob_b * p.b_v_freq
@@ -93,15 +100,17 @@ class Parameters:
         while abs(l_h_s - r_h_s) != 0:
             l_h_s = r_h_s 
             r_h_s = (
-                (
-                    (   (p_b_h_zero*prob_b_h + p_g_h_zero*prob_g_h)* p.vh + p.vl*(prob_b_l + prob_g_l) )
-                )
-            /
-                (
-                    # Denominator
-                    (p_b_h_zero * prob_b_h+ p_g_h_zero* prob_g_h) + prob_b_l + prob_g_l
-                )
-            )
+                            (
+                                (   (p_b_h_zero*prob_b_h + p_g_h_zero*prob_g_h)* p.vh + p.vl*(prob_b_l + prob_g_l) )
+                            )
+                        /
+                        (
+                                # Denominator
+                            (
+                                p_b_h_zero * prob_b_h + p_g_h_zero * prob_g_h + prob_b_l + prob_g_l
+                            )
+                        )
+                    )
         threshold = max(r_h_s, p.w_min)
         # threshold = 0.1541919477612662
         self.threshold = threshold
@@ -110,6 +119,7 @@ class Parameters:
     def hire_continuous(self) -> float:
         p = self
         e_b = self.e_b
+        e_b_h = self.e_b_h
         e_g = 1 - e_b
         
         assert self.threshold > self.w_min, "Make sure to calculate threshold before hiring"
@@ -171,82 +181,107 @@ class Parameters:
         
         
         b_p_h_not_r = b_p_h_pool
-        # e_b_next = ((p_b_h_zero * p.prob_b_h + p.prob_b_l) * b_p_h_not_r + (1-p_b_h_zero)*b_p_h_r)*p.number_of_blue
-        # e_g_next = ((p_g_h_zero * p.prob_g_h + p.prob_g_l) * b_p_h_pool + (1-p_g_h_zero)* g_p_h_r) * p.number_of_green
         
-    
-        
-        
+        # This is an intersection of sets, we want probability given, thus converted in next step
+        non_norm_ebh_next = (p_b_h_zero* b_p_h_not_r + (1-p_b_h_zero)) * p.number_of_blue * p.b_v_freq
+        non_norm_egh_next = (p_g_h_zero * b_p_h_pool + (1-p_g_h_zero)) * p.number_of_green * p.g_v_freq
+
+
         e_b_next = ((p_b_h_zero * p.b_v_freq + p_b_l_zero*(1-p.b_v_freq) + (1-p_b_l_zero)*(1-p.b_v_freq)) * b_p_h_not_r + (1-p_b_h_zero)*p.b_v_freq) * p.number_of_blue
         e_g_next = ((p_g_h_zero*p.g_v_freq + p_g_l_zero*(1-p.g_v_freq) + (1-p_g_l_zero)*(1-p.g_v_freq)) * b_p_h_pool + (1-p_g_h_zero)*p.g_v_freq) * p.number_of_green
+        
+        ebh_next = non_norm_ebh_next/e_b_next
+        egh_next = non_norm_egh_next/e_g_next
+        
+        # Check logic by employment summing to 1 
         # print(e_g_next + e_b_next)
-        return (e_b_next)
+        return {'e_b' : e_b_next, 'e_b_h': ebh_next, 'e_g_h': egh_next}
 
-def run_periods(periods = 15, e_b = 0.8, n= 2.0, alpha_b= 1, alpha_g= 1, 
+def run_periods(periods = 15, e_b = 0.8, e_b_h = 0.5, e_g_h = 0.5, n= 2.0, alpha_b= 1, alpha_g= 1, 
                       h_b= 1, h_g= 1 ):
-    e_b = 0.8
-    tao = 0.5
+    e_b = e_b
+    e_b_h = e_b_h
+    e_g_h = e_g_h
     periods = periods
 
         
     for period in range(periods):
-        p = Parameters(e_b = e_b, number_of_blue= n, number_of_green=n, alpha_b= alpha_b, alpha_g= alpha_g, 
+        p = Parameters(e_b = e_b, e_b_h = e_b_h, e_g_h = e_g_h, number_of_blue= n, number_of_green=n, alpha_b= alpha_b, alpha_g= alpha_g, 
                       h_b= h_b, h_g= h_g)
         if period == 0:
             print(f'The parameters for p are {p}')
         print(f'the male employment rate in period {period} is {e_b}')
+        print(f'the high skilled male employment is {e_b_h}')
+        print(f'the high skilled female emp is {e_g_h}')
         p.calculate_threshold()
 
         print(f'the skill threshold for this period is {p.threshold} ')
         # if e_b <= 0.5:
             # print(f'It took {period} generations for the male employment rate to equal the female employment rate')
             # break
-        e_b = p.hire_continuous()
+        future_emp_dict = p.hire_continuous()
+        e_b, e_b_h, e_g_h = future_emp_dict['e_b'], future_emp_dict['e_b_h'], future_emp_dict['e_g_h']
+
         
 
-def run_period(e_b, n: float = 2.0, alpha_b: float = 0.8, alpha_g: float = 0.8, 
+def run_period(e_b, e_b_h: float = 0.5, e_g_h: float = 0.5, n: float = 2.0, alpha_b: float = 0.8, alpha_g: float = 0.8, 
                       h_b: float = 0.8, h_g: float = 0.8):
     
-    p = Parameters(e_b = e_b, number_of_blue= n, number_of_green=n, alpha_b= alpha_b, alpha_g= alpha_g, 
+    p = Parameters(e_b = e_b, e_b_h = e_b_h, e_g_h = e_g_h, number_of_blue= n, number_of_green=n, alpha_b= alpha_b, alpha_g= alpha_g, 
                       h_b= h_b, h_g= h_g )
     
     
     p.calculate_threshold()
 
-    e_b_new = p.hire_continuous()
-    return e_b_new
+    future_emp_dict = p.hire_continuous()
+    e_b, e_b_h, e_g_h = future_emp_dict['e_b'], future_emp_dict['e_b_h'], future_emp_dict['e_g_h']
+    
+    return (e_b, e_b_h, e_g_h)
     
 def find_steady_state(e_b_0: float, n: float, alpha_b: float, alpha_g: float, 
-                      h_b: float, h_g: float, max_iterations: int = 1000, return_iterations: bool = False):
+                      h_b: float, h_g: float, e_b_h_0: float = 0.5, e_g_h_0: float = 0.5,
+                       max_iterations: int = 1000, return_iterations: bool = False):
     iteration = 0
     e_b = e_b_0
-    e_b_new = 0
+    e_b_h = e_b_h_0
+    e_g_h = e_g_h_0
+
+
+    e_b_new = None
+    ebh_new = None
+    egh_new = None
+
     if return_iterations:
+
         while abs(e_b - e_b_new) > 0.000001 and iteration < max_iterations:
             iteration +=1
             e_b = e_b_new if e_b_new else e_b
-            e_b_new= run_period(e_b = e_b, n = n, alpha_b=alpha_b, alpha_g=alpha_g, h_b = h_b, h_g = h_g)
+            e_b_h = ebh_new if ebh_new else e_b_h
+            e_g_h = egh_new if egh_new else e_g_h
+            e_b_new, ebh_new, egh_new = run_period(e_b = e_b, e_b_h = e_b_h, e_g_h = e_g_h, n = n, alpha_b=alpha_b, alpha_g=alpha_g, h_b = h_b, h_g = h_g)
     
     else:
+        
         while e_b != e_b_new and iteration < max_iterations:
             iteration +=1
             e_b = e_b_new if e_b_new else e_b
-            e_b_new= run_period(e_b = e_b, n = n, alpha_b=alpha_b, alpha_g=alpha_g, h_b = h_b, h_g = h_g)
+            e_b_h = ebh_new if ebh_new else e_b_h
+            e_g_h = egh_new if egh_new else e_g_h
+            e_b_new, ebh_new, egh_new = run_period(e_b = e_b, e_b_h = e_b_h, e_g_h = e_g_h, n = n, alpha_b=alpha_b, alpha_g=alpha_g, h_b = h_b, h_g = h_g)
         
-    
     if iteration == max_iterations:
         # print('max iteration reached')
         if return_iterations:
             return iteration
         else:
-            return e_b
+            return (e_b_new, ebh_new, egh_new)
     
     else:
         # print(f'reached in iteration # {iteration}')
         if return_iterations:
             return iteration
         else:
-            return e_b
+            return (e_b_new, ebh_new, egh_new)
     
     
 def plot_e_b():
@@ -257,20 +292,28 @@ def plot_e_b():
     h_b_array = np.linspace(0.5, 1, num = 6)
 
     e_b_array_dict = {
-    'n, a_b':
-    [n_array, list(map(lambda a_b: [a_b, np.array([find_steady_state(e_b_0 = 0.8, n=n, alpha_b = a_b, 
-                                            alpha_g = 0.5, h_b = 1, h_g = 1) for n in n_array])], a_b_array))]
+    # 'n, a_b':
+    # [n_array, list(map(lambda a_b: [a_b, np.array([find_steady_state(e_b_0 = 0.8, n=n, alpha_b = a_b, 
+    #                                         alpha_g = 0.5, h_b = 1, h_g = 1) for n in n_array])], a_b_array))]
+    # ,
+    # 'n, h_b, h_g = 0.5':
+    #     [n_array, list(map(lambda h_b: [h_b, np.array([find_steady_state(e_b_0 = 0.8, n=n, alpha_b = 1, 
+    #                                         alpha_g = 0.5, h_b = h_b, h_g = 0.5) for n in n_array])], h_b_array))]
+    # ,
+    'a_b, h':
+        [a_b_array, list(map(lambda h_b: [h_b, np.array([find_steady_state(e_b_0 = 0.8, n=1.0, alpha_b = a, 
+                                            alpha_g = 0.5, h_b = h_b, h_g = h_b) for a in a_b_array])], h_b_array))]
     ,
-    'n, h_b, h_g = 0.5':
-        [n_array, list(map(lambda h_b: [h_b, np.array([find_steady_state(e_b_0 = 0.8, n=n, alpha_b = 1, 
-                                            alpha_g = 0.5, h_b = h_b, h_g = 0.5) for n in n_array])], h_b_array))]
+    'just h_b':
+        [h_b_array, list(map(lambda a: [a, np.array([find_steady_state(e_b_0 = 0.8, n=1.0, alpha_b = a, 
+                                            alpha_g = 0.5, h_b = h_b, h_g = 0.5) for h_b in h_b_array])], [0.5]*len(a_b_array)))]
     ,
-    'h_b, n = 2 and alpha':
-        [h_b_array, list(map(lambda a: [a, np.array([find_steady_state(e_b_0 = 0.8, n=2.0, alpha_b = a, 
+    'h_b, n = 1 and alpha':
+        [h_b_array, list(map(lambda a: [a, np.array([find_steady_state(e_b_0 = 0.8, n=1.0, alpha_b = a, 
                                             alpha_g = a, h_b = h_b, h_g = 0.5) for h_b in h_b_array])], a_b_array))]
     ,
-    'h_b, alpha_b, alpha_g = 0.5 and h_g =0.5 and n = 2':
-        [h_b_array, list(map(lambda a: [a, np.array([find_steady_state(e_b_0 = 0.8, n=2.0, alpha_b = a, 
+    'h_b, alpha_b, alpha_g = 0.5 and h_g =0.5 and n = 1':
+        [h_b_array, list(map(lambda a: [a, np.array([find_steady_state(e_b_0 = 0.8, n=1.0, alpha_b = a, 
                                             alpha_g = 0.5, h_b = h_b, h_g = 0.5) for h_b in h_b_array])], a_b_array))]
     }
 
@@ -338,9 +381,13 @@ def plot_iterations():
             axs[j].set_title(f'iteration_no as a function of {key_list[0]}')
     plt.show()
 
-# print(find_steady_state(e_b_0 = 0.8, n=2.0, alpha_b = 1.0, 
-                                                # alpha_g = 0.5, h_b = 1, h_g = 1))
+print(find_steady_state(e_b_0 = 0.8, n=2.0, alpha_b = 1.0, alpha_g = 1.0, h_b = 1.0, h_g = 1.0))
+
+
 # run_periods(periods=15, e_b = 0.8, n=2.0, alpha_b = 1.0, 
 #                                                 alpha_g = 0.5, h_b = 1, h_g = 1)
 
-# print(run_periods())
+# run_periods()
+
+# plot_e_b()
+
