@@ -10,6 +10,7 @@ import matplotlib.pyplot as plt
 @dataclass
 class Parameters:
     e_b: float
+    e_g: float
     e_b_h: float # defined as proportion of e_b that is h (prob h given e_b)
     e_g_h: float = 0.5
     # tao: float
@@ -24,11 +25,12 @@ class Parameters:
     value_distribution: str = "vh vl"
     vh : float = 2
     vl : float = 0
-    alpha: float = 0.7
+    alpha: float = 0.5
     alpha_b: float = alpha
     alpha_g: float = alpha
     
-    vh_freq: float = 0.7
+    # 0.2549378627974277
+    vh_freq: float = 0.6
     b_v_freq: float = vh_freq
     g_v_freq: float = vh_freq
     
@@ -111,7 +113,8 @@ class Parameters:
                             )
                         )
                     )
-        threshold = max(r_h_s, p.w_min)
+        self.v_tilda = r_h_s
+        threshold = max(self.v_tilda, self.w_min)
         # threshold = 0.1541919477612662
         self.threshold = threshold
         return (threshold)
@@ -119,23 +122,24 @@ class Parameters:
     def hire_continuous(self) -> float:
         p = self
         e_b = p.e_b
+        e_g = p.e_g
         e_b_h = p.e_b_h
         e_b_l = 1 - e_b_h
         e_g_h = p.e_g_h
         e_g_l = 1 - e_g_h
-        e_g = 1 - e_b
-        assert self.threshold > self.w_min, "Make sure to calculate threshold before hiring"
+        assert self.threshold >= self.w_min, "Make sure to calculate threshold before hiring"
         assert e_b <= 1, "Something wrong with the logic"
         
         if self.ref_distribution == "Poisson":
             b_h_lambda = 1/(p.b_v_freq * p.number_of_blue) * ( (e_b * p.h_b * ((e_b_h * p.alpha_b) + (1-p.alpha_b)*(e_b_l))) + (1-p.h_g)*e_g * ((e_g_h * p.alpha_g) + (e_g_l) * (1-p.alpha_g)))
+            self.b_h_lambda = b_h_lambda
             b_l_lambda = 1/((1-p.b_v_freq) * p.number_of_blue) * ( (e_b * p.h_b * (((1-e_b_h) * p.alpha_b) + (1-p.alpha_b)*(e_b_h))) + (1-p.h_g)*e_g * (((1-e_g_h)* p.alpha_g) + (e_g_h * (1-p.alpha_g))))
-            
-            
+            self.b_l_lambda = b_l_lambda
+
             g_h_lambda = 1/(p.g_v_freq * p.number_of_green) * ( (e_g * p.h_g * ((e_g_h * p.alpha_g) + (1-p.alpha_g)*(1-e_g_h))) + (1-p.h_b)*e_b * ((e_b_h* p.alpha_b) + (1-e_b_h) * (1-p.alpha_b)))
             g_l_lambda = 1/((1-p.g_v_freq) * p.number_of_green) * ( (e_g * p.h_g * (((1-e_g_h) * p.alpha_g) + (1-p.alpha_g)*(e_g_h))) + (1-p.h_b)*e_b * (((1-e_b_h)* p.alpha_b) + (e_b_h * (1-p.alpha_b))))
-            
-            
+
+
             p_b_h_zero = poisson.pmf(0, b_h_lambda)
             p_b_l_zero = poisson.pmf(0, b_l_lambda)
             
@@ -161,18 +165,19 @@ class Parameters:
                  )
         /
             (
-            (p_b_h_zero*p.b_v_freq + p_b_l_zero*(1-p.b_v_freq) + (1-p_b_l_zero)*(1-p.b_v_freq))*p.number_of_blue + (p_g_h_zero*p.g_v_freq + p_g_l_zero*(1-p.g_v_freq) + (1-p_g_l_zero)*(1-p.g_v_freq))*p.number_of_green
+            (1-(1-p_b_h_zero)*p.b_v_freq)*p.number_of_blue + (1-(1-p_g_h_zero)*p.g_v_freq)*p.number_of_green
             )
         )
+
                 
-        
-        # print(f'{b_p_h_pool} is bph pool')
+        assert b_p_h_pool >= 0, "whoopsy doopsy"
         
         if b_p_h_pool > 1:
             print('uh oh probability greater than one check logic')
         
-        b_p_h_pool = b_p_h_pool if b_p_h_pool < 1 else 1
+        b_p_h_pool = b_p_h_pool if self.v_tilda >= p.w_min else 0
         
+        # print(f'{b_p_h_pool} is bph pool')
                      
         
         # g_p_h_pool = b_p_h_pool
@@ -189,18 +194,33 @@ class Parameters:
         non_norm_ebh_next = (p_b_h_zero* b_p_h_not_r + (1-p_b_h_zero)) * p.number_of_blue * p.b_v_freq
         non_norm_egh_next = (p_g_h_zero * b_p_h_pool + (1-p_g_h_zero)) * p.number_of_green * p.g_v_freq
 
-
-        e_b_next = ((p_b_h_zero * p.b_v_freq + p_b_l_zero*(1-p.b_v_freq) + (1-p_b_l_zero)*(1-p.b_v_freq)) * b_p_h_not_r + (1-p_b_h_zero)*p.b_v_freq) * p.number_of_blue
-        e_g_next = ((p_g_h_zero*p.g_v_freq + p_g_l_zero*(1-p.g_v_freq) + (1-p_g_l_zero)*(1-p.g_v_freq)) * b_p_h_pool + (1-p_g_h_zero)*p.g_v_freq) * p.number_of_green
+        theta_b, theta_g = p.b_v_freq*(1-p_b_h_zero), p.g_v_freq*(1-p_g_h_zero)
+        
+        e_b_next = ((1- theta_b) * b_p_h_not_r + theta_b) * p.number_of_blue
+        e_g_next = ((1-theta_g) * b_p_h_not_r + theta_g) * p.number_of_green
+        
+        # print((theta_b-theta_g)*(1-b_p_h_not_r))
         
         ebh_next = non_norm_ebh_next/e_b_next
         egh_next = non_norm_egh_next/e_g_next
         
+        # print(e_b_next, e_g_next)
+        
         # Check logic by employment summing to 1 
         # print(e_g_next + e_b_next)
-        return {'e_b' : e_b_next, 'e_b_h': ebh_next, 'e_g_h': egh_next}
 
-def run_periods(periods = 15, e_b = 0.8, e_b_h = 0.5, e_g_h = 0.5, n= 2.0, alpha_b= 1, alpha_g= 1, 
+        # n = p.number_of_blue
+        # h_b, h_g, alpha_b, alpha_g = p.h_b, p.h_g, p.alpha_b, p.alpha_g
+        # print('lambda bh')
+        # print(1/(p.vh_freq * n) * ( (e_b_next * h_b * (ebh_next * alpha_b))))
+        # print('lambda bl')
+        # print(1/((1-p.vh_freq) * n) * ((e_b_next * h_b * (((1-ebh_next) * alpha_b) + (1-alpha_b)*(ebh_next))) + (1-h_g)*(1-e_b_next) * (egh_next * (1-alpha_g) + (1-egh_next) * (alpha_g))))
+        # print('lambda gh')
+        # print(1/((p.vh_freq) * n) * (((1-e_b_next) * h_g * ((egh_next * alpha_b) + (1-alpha_b)*(egh_next))) + (1-h_b)*(e_b_next) * (ebh_next * alpha_b + (1-ebh_next) * (1-alpha_g))))
+        
+        return {'e_b' : e_b_next, 'e_b_h': ebh_next, 'e_g_h': egh_next, 'e_g': e_g_next}
+
+def run_periods(periods = 15, e_b = 0.8, e_g= 0.2, e_b_h = 0.5, e_g_h = 0.5, n= 2.0, alpha_b= 1, alpha_g= 1, 
                       h_b= 1, h_g= 1 ):
     e_b = e_b
     e_b_h = e_b_h
@@ -209,7 +229,7 @@ def run_periods(periods = 15, e_b = 0.8, e_b_h = 0.5, e_g_h = 0.5, n= 2.0, alpha
 
         
     for period in range(periods):
-        p = Parameters(e_b = e_b, e_b_h = e_b_h, e_g_h = e_g_h, number_of_blue= n, number_of_green=n, alpha_b= alpha_b, alpha_g= alpha_g, 
+        p = Parameters(e_b = e_b, e_g = e_g, e_b_h = e_b_h, e_g_h = e_g_h, number_of_blue= n, number_of_green=n, alpha_b= alpha_b, alpha_g= alpha_g, 
                       h_b= h_b, h_g= h_g)
         if period == 0:
             print(f'The parameters for p are {p}')
@@ -218,73 +238,92 @@ def run_periods(periods = 15, e_b = 0.8, e_b_h = 0.5, e_g_h = 0.5, n= 2.0, alpha
         print(f'the high skilled female emp is {e_g_h}')
         p.calculate_threshold()
 
-        print(f'the skill threshold for this period is {p.threshold} ')
+        # print(f'the skill threshold for this period is {p.threshold} ')
         # if e_b <= 0.5:
             # print(f'It took {period} generations for the male employment rate to equal the female employment rate')
             # break
         future_emp_dict = p.hire_continuous()
-        e_b, e_b_h, e_g_h = future_emp_dict['e_b'], future_emp_dict['e_b_h'], future_emp_dict['e_g_h']
+        e_b, e_g, e_b_h, e_g_h = future_emp_dict['e_b'], future_emp_dict['e_g'], future_emp_dict['e_b_h'], future_emp_dict['e_g_h']
 
         
-
-def run_period(e_b, e_b_h: float = 0.5, e_g_h: float = 0.5, n: float = 2.0, alpha_b: float = 0.8, alpha_g: float = 0.8, 
-                      h_b: float = 0.8, h_g: float = 0.8):
+# vh_freq doesnt work, watch out
+def run_period(e_b, e_g, e_b_h: float = 0.5, e_g_h: float = 0.5, n: float = 2.0, alpha_b: float = 0.8, alpha_g: float = 0.8, 
+                      h_b: float = 0.8, h_g: float = 0.8, vh_freq = 0.7):
     
-    p = Parameters(e_b = e_b, e_b_h = e_b_h, e_g_h = e_g_h, number_of_blue= n, number_of_green=n, alpha_b= alpha_b, alpha_g= alpha_g, 
-                      h_b= h_b, h_g= h_g )
+    p = Parameters(e_b = e_b, e_g =e_g, e_b_h = e_b_h, e_g_h = e_g_h, number_of_blue= n, number_of_green=n, alpha_b= alpha_b, alpha_g= alpha_g, 
+                      h_b= h_b, h_g= h_g, vh_freq = vh_freq)
     
     
     p.calculate_threshold()
 
     future_emp_dict = p.hire_continuous()
-    e_b, e_b_h, e_g_h = future_emp_dict['e_b'], future_emp_dict['e_b_h'], future_emp_dict['e_g_h']
+    e_b, e_g, e_b_h, e_g_h = future_emp_dict['e_b'], future_emp_dict['e_g'], future_emp_dict['e_b_h'], future_emp_dict['e_g_h']
     
-    return (e_b, e_b_h, e_g_h)
-    
-def find_steady_state(e_b_0: float, n: float, alpha_b: float, alpha_g: float, 
-                      h_b: float, h_g: float, e_b_h_0: float = 0.5, e_g_h_0: float = 0.5,
+    return (e_b, e_g, e_b_h, e_g_h)
+
+    # vh_freq doesn't work cuz dataclass, will need to fix
+def find_steady_state(e_b_0: float, n: float, alpha_b: float, alpha_g: float, h_b: float,  h_g: float,
+                       e_g_0: float = 0.5, e_b_h_0: float = 0.5, e_g_h_0: float = 0.5, vh_freq = 0.4,
                        max_iterations: int = 1000, return_iterations: bool = False):
     iteration = 0
     e_b = e_b_0
+    e_g = e_g_0
     e_b_h = e_b_h_0
     e_g_h = e_g_h_0
 
+    # Just for return param
+    p = Parameters(e_b = e_b, e_g = e_g_0, e_b_h = e_b_h, e_g_h = e_g_h, number_of_blue= n, number_of_green=n, alpha_b= alpha_b, alpha_g= alpha_g, 
+                      h_b= h_b, h_g= h_g, vh_freq = vh_freq )
 
-    e_b_new = None
-    ebh_new = None
-    egh_new = None
+    e_b_new = 0
+    e_g_new = 0
+    ebh_new = 0
+    egh_new = 0
 
     if return_iterations:
 
-        while abs(e_b - e_b_new) > 0.000001 and iteration < max_iterations:
+        while (abs(e_b - e_b_new) != 0.0 or abs(e_b_h - ebh_new) != 0.0 or abs(e_g_h - egh_new) != 0.0) and iteration < max_iterations:
             iteration +=1
             e_b = e_b_new if e_b_new else e_b
+            e_g = e_g_new if e_g_new else e_g
             e_b_h = ebh_new if ebh_new else e_b_h
             e_g_h = egh_new if egh_new else e_g_h
-            e_b_new, ebh_new, egh_new = run_period(e_b = e_b, e_b_h = e_b_h, e_g_h = e_g_h, n = n, alpha_b=alpha_b, alpha_g=alpha_g, h_b = h_b, h_g = h_g)
+            e_b_new, e_g_new, ebh_new, egh_new = run_period(e_b = e_b, e_g = e_g, e_b_h = e_b_h, e_g_h = e_g_h, n = n, alpha_b=alpha_b, alpha_g=alpha_g, h_b = h_b, h_g = h_g)
     
     else:
         
-        while e_b != e_b_new and iteration < max_iterations:
+        while (e_b != e_b_new or e_b_h != ebh_new or e_g_h != egh_new) and iteration < max_iterations:
             iteration +=1
             e_b = e_b_new if e_b_new else e_b
+            e_g = e_g_new if e_g_new else e_g            
             e_b_h = ebh_new if ebh_new else e_b_h
             e_g_h = egh_new if egh_new else e_g_h
-            e_b_new, ebh_new, egh_new = run_period(e_b = e_b, e_b_h = e_b_h, e_g_h = e_g_h, n = n, alpha_b=alpha_b, alpha_g=alpha_g, h_b = h_b, h_g = h_g)
+            e_b_new, e_g_new, ebh_new, egh_new = run_period(e_b = e_b, e_g= e_g, e_b_h = e_b_h, e_g_h = e_g_h, n = n, alpha_b=alpha_b, alpha_g=alpha_g, h_b = h_b, h_g = h_g)
         
     if iteration == max_iterations:
-        # print('max iteration reached')
+        print('max iteration reached')
         if return_iterations:
             return iteration
         else:
-            return (e_b_new, ebh_new, egh_new)
+            return (e_b_new, e_g_new, ebh_new, egh_new)
     
     else:
-        # print(f'reached in iteration # {iteration}')
+        print(f'reached in iteration # {iteration}')
         if return_iterations:
             return iteration
         else:
-            return (e_b_new, ebh_new, egh_new)
+            p = Parameters(e_b = e_b, e_g=e_g, e_b_h = e_b_h, e_g_h = e_g_h, number_of_blue= n, number_of_green=n, alpha_b= alpha_b, alpha_g= alpha_g, 
+                      h_b= h_b, h_g= h_g )
+            print('lambda bh')
+            # print(p.vh_freq, n, e_b_new, ebh_new, alpha_b, alpha_g, h_b, h_g)
+            lambda_bh_n = (1/(p.vh_freq * n) * ( (e_b_new * h_b * ((ebh_new * alpha_b) + (1-alpha_b)*(1-ebh_new))) + (1-h_g)*(1-e_b_new) * ((egh_new * alpha_g) + (1-egh_new) * (1-alpha_g))))
+            print(lambda_bh_n)
+
+            print('lambda bl')
+            print(1/((1-p.vh_freq) * n) * ((e_b_new * h_b * (((1-ebh_new) * alpha_b) + (1-alpha_b)*(ebh_new))) + (1-h_g)*(1-e_b_new) * (egh_new * (1-alpha_g) + (1-egh_new) * (alpha_g))))
+            # print('lambda gh')
+            # print(1/((p.vh_freq) * n) * (((1-e_b_new) * h_g * ((egh_new * alpha_b) + (1-alpha_b)*(egh_new))) + (1-h_b)*(e_b_new) * (ebh_new * alpha_b + (1-ebh_new) * (1-alpha_g))))
+            return (e_b_new, e_g_new, ebh_new, egh_new)
     
     
 def plot_e_b():
@@ -384,11 +423,10 @@ def plot_iterations():
             axs[j].set_title(f'iteration_no as a function of {key_list[0]}')
     plt.show()
 
-print(find_steady_state(e_b_0 = 0.8, n=2.0, alpha_b = 1.0, alpha_g = 0.5, h_b = 1.0, h_g = 1.0))
+print(find_steady_state(e_b_0 = 0.1, e_g_0=0.3, e_b_h_0=0.2, e_g_h_0 = 0.2, n=0.8, alpha_b = 1, alpha_g = 1, h_b = 1.0, h_g = 1.0, return_iterations=False))
 
 
-# run_periods(periods=15, e_b = 0.8, n=2.0, alpha_b = 1.0, 
-#                                                 alpha_g = 0.5, h_b = 1, h_g = 1)
+# run_periods(periods=15, e_b = 0.8, e_g =0.2, e_b_h = 0.8, n=2.0, alpha_b = 1.0, alpha_g = 1, h_b = 1, h_g = 1)
 
 # run_periods()
 
