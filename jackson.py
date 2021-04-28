@@ -6,7 +6,7 @@ import random as rand
 import matplotlib as mp
 import matplotlib.pyplot as plt
 
-
+vh_freq = 0.4
 @dataclass
 class Parameters:
     e_b: float
@@ -21,12 +21,12 @@ class Parameters:
     value_distribution: str = "vh vl"
     vh : float = 2
     vl : float = 0
-    alpha: float = 0.7
+    alpha: float = 0.9
     alpha_b: float = alpha
     alpha_g: float = alpha
     
     # 0.2549378627974277
-    vh_freq: float = 0.4
+    vh_freq: float = vh_freq
     b_v_freq: float = vh_freq
     g_v_freq: float = vh_freq
     
@@ -148,9 +148,12 @@ class Parameters:
         return e_b_next, ebh_next, egh_next
 
 def run_period(e_b: float, n: float = 2.0, alpha_b: float = 0.8, alpha_g: float = 0.8, 
-                      h_b: float = 0.8, h_g: float = 0.8):
+    n_b : float = None , n_g : float = None, h_b: float = 0.8, h_g: float = 0.8):
     
-    p = Parameters(e_b = e_b, number_of_blue= n, number_of_green=n, alpha_b= alpha_b, alpha_g= alpha_g, 
+    n_b = n_b if n_b else n
+    n_g = n_g if n_g else n
+
+    p = Parameters(e_b = e_b, number_of_blue= n_b, number_of_green=n_g, alpha_b= alpha_b, alpha_g= alpha_g, 
                       h_b= h_b, h_g= h_g)
     
     
@@ -160,25 +163,28 @@ def run_period(e_b: float, n: float = 2.0, alpha_b: float = 0.8, alpha_g: float 
     
     return e_b, ebh_next, egh_next
 
-def find_steady_state(e_b_0: float, n: float, alpha_b: float, alpha_g: float, h_b: float,  h_g: float,
-                       max_iterations: int = 1000, return_iterations: bool = False):
+def find_steady_state(e_b_0: float, alpha_b: float, alpha_g: float, h_b: float,  h_g: float,
+    n_b : float = None, n_g : float = None, max_iterations: int = 1000, return_iterations: bool = False):
     iteration = 0
     e_b = e_b_0
     e_b_new = 0
+
+    n_b = n_b if n_b else n
+    n_g = n_g if n_g else n
 
     if return_iterations:
 
         while abs(e_b - e_b_new) != 0.0 and iteration < max_iterations:
             iteration +=1
             e_b = e_b_new if e_b_new else e_b
-            e_b_new, ebh_new, egh_new = run_period(e_b = e_b, n = n, alpha_b=alpha_b, alpha_g=alpha_g, h_b = h_b, h_g = h_g)
+            e_b_new, ebh_new, egh_new = run_period(e_b = e_b, n_b = n_b, n_g = n_g, alpha_b=alpha_b, alpha_g=alpha_g, h_b = h_b, h_g = h_g)
     
     else:
         
         while e_b!= e_b_new and iteration < max_iterations:
             iteration +=1
             e_b = e_b_new if e_b_new else e_b
-            e_b_new, ebh_new, egh_new = run_period(e_b = e_b, n = n, alpha_b=alpha_b, alpha_g=alpha_g, h_b = h_b, h_g = h_g)
+            e_b_new, ebh_new, egh_new = run_period(e_b = e_b, n_b = n_b, n_g = n_g, alpha_b=alpha_b, alpha_g=alpha_g, h_b = h_b, h_g = h_g)
         
     if iteration == max_iterations and e_b != e_b_new:
         print('max iteration reached')
@@ -192,7 +198,7 @@ def find_steady_state(e_b_0: float, n: float, alpha_b: float, alpha_g: float, h_
         if return_iterations:
             return iteration
         else:
-            p = Parameters(e_b = e_b, number_of_blue= n, number_of_green=n, alpha_b= alpha_b, alpha_g= alpha_g, 
+            p = Parameters(e_b = e_b, number_of_blue= n_b, number_of_green=n_g, alpha_b= alpha_b, alpha_g= alpha_g, 
                       h_b= h_b, h_g= h_g)
             p.calculate_threshold()
             print('lambda b')
@@ -201,16 +207,19 @@ def find_steady_state(e_b_0: float, n: float, alpha_b: float, alpha_g: float, h_
             return e_b_new, ebh_new, egh_new
 
 
-def run_periods(periods = 15, e_b = 0.8, e_b_h = 0.5, e_g_h = 0.5, n= 2.0, alpha_b= 1, alpha_g= 1, 
+def run_periods(periods = 15, e_b = 0.8, e_b_h = 0.5, e_g_h = 0.5, n= 2.0, n_b : float = None, n_g : float = None, alpha_b= 1, alpha_g= 1, 
                       h_b= 1, h_g= 1 ):
     e_b = e_b
     e_b_h = e_b_h
     e_g_h = e_g_h
     periods = periods
 
+    n_b = n_b if n_b else n
+    n_g = n_g if n_g else n
+
         
     for period in range(periods):
-        p = Parameters(e_b = e_b, number_of_blue= n, number_of_green=n, alpha_b= alpha_b, alpha_g= alpha_g, 
+        p = Parameters(e_b = e_b, number_of_blue = n_b, number_of_green = n_g, alpha_b= alpha_b, alpha_g= alpha_g, 
                       h_b= h_b, h_g= h_g)
         if period == 0:
             print(f'The parameters for p are {p}')
@@ -225,5 +234,5 @@ def run_periods(periods = 15, e_b = 0.8, e_b_h = 0.5, e_g_h = 0.5, n= 2.0, alpha
             # break
         e_b, e_b_h, e_g_h = p.hire_continuous()
 
-print(find_steady_state(e_b_0 = 0.1, n=0.6, h_b = 1, h_g = 0.5, alpha_b = 1, alpha_g = 1, return_iterations=False))
+print(find_steady_state(e_b_0 = 1.0, n_b = 1.0, n_g = 1.0, h_b = 1, h_g = 1, alpha_b = 1, alpha_g = 1, return_iterations=False))
 # run_periods(e_b=0.8, h_b = 1, h_g = 1)
